@@ -60,16 +60,38 @@ export default function VoiceAssistant() {
   const audioChunks: Uint8Array[] = [];
 
   useEffect(() => {
-    if (isSpeaking && finalResponse) {
-      console.log("isSpeaking:", isSpeaking);
-      console.log("finalResponse:", finalResponse);
+    // Preload WebSocket when the component mounts
+    const preloadSocket = new WebSocket(wsUrl);
+    preloadSocket.onopen = () => {
+      console.log("Preloading WebSocket...");
+      preloadSocket.send(
+        JSON.stringify({
+          text: "Hi",
+          voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+          xi_api_key: ELEVENLABS_API_KEY,
+        })
+      );
+      preloadSocket.send(JSON.stringify({ text: "" }));
+    };
 
+    preloadSocket.onerror = (error) => {
+      console.warn("Preload WebSocket error (expected):", error);
+    };
+
+    preloadSocket.onclose = () => {
+      console.log("Preload WebSocket closed.");
+    };
+
+    return () => preloadSocket.close(); // Cleanup the socket on component unmount
+  }, []);
+
+  useEffect(() => {
+    if (isSpeaking && finalResponse) {
       const words = finalResponse.split(" ");
       if (wordIndex < words.length) {
         const timer = setTimeout(() => {
           setVisibleText(words.slice(0, wordIndex + 1).join(" "));
           setWordIndex((prev) => prev + 1);
-          console.log("Visible text updated:", visibleText);
         }, 200);
         return () => clearTimeout(timer);
       }
@@ -77,10 +99,8 @@ export default function VoiceAssistant() {
   }, [isSpeaking, wordIndex, finalResponse]);
 
   const startRecording = () => {
-    console.log("Recording started");
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
-
     if (!SpeechRecognition) {
       alert("Your browser does not support Speech Recognition");
       return;
@@ -94,7 +114,6 @@ export default function VoiceAssistant() {
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const resultTranscript = event.results[0][0].transcript;
-      console.log("Transcript received:", resultTranscript);
       setTranscript(resultTranscript);
       fetchAIResponse(resultTranscript);
     };
@@ -104,10 +123,7 @@ export default function VoiceAssistant() {
       setIsRecording(false);
     };
 
-    recognition.onend = () => {
-      console.log("Speech recognition ended");
-      setIsRecording(false);
-    };
+    recognition.onend = () => setIsRecording(false);
 
     recognitionRef.current = recognition;
     recognition.start();
@@ -115,7 +131,6 @@ export default function VoiceAssistant() {
   };
 
   const fetchAIResponse = async (userText: string) => {
-    console.log("Fetching AI response for:", userText);
     setResponseText("");
     setFinalResponse("");
     setIsLoading(true);
@@ -148,13 +163,11 @@ export default function VoiceAssistant() {
             const jsonStr = part.replace(/^data:\s*/, "");
             try {
               const event: SSEEvent = JSON.parse(jsonStr);
-              console.log("Received SSE event:", event.text);
               setResponseText((prev) => prev + event.text);
             } catch (err) {
               console.error("Error parsing SSE event:", err);
             }
           } else if (part.startsWith("event: done")) {
-            console.log("Final response received:", responseText);
             setFinalResponse(responseText);
             setIsLoading(false);
             streamAudio(responseText);
@@ -169,37 +182,34 @@ export default function VoiceAssistant() {
   };
 
   const streamAudio = (text: string) => {
-    console.log("Streaming audio for:", text);
+    audioChunks.length = 0;
     const socket = new WebSocket(wsUrl);
     setIsSpeaking(true);
 
     socket.onopen = () => {
-      console.log("WebSocket connection opened");
       const bosMessage = {
         text: " ",
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.8,
-        },
+        voice_settings: { stability: 0.5, similarity_boost: 0.8 },
         xi_api_key: ELEVENLABS_API_KEY,
       };
-
       socket.send(JSON.stringify(bosMessage));
       socket.send(JSON.stringify({ text }));
       socket.send(JSON.stringify({ text: "" }));
     };
 
     socket.onmessage = (event) => {
-      console.log("WebSocket message received");
       const response = JSON.parse(event.data);
       if (response.audio) {
-        const audioData = Uint8Array.from(atob(response.audio), (c) =>
-          c.charCodeAt(0)
-        );
-        audioChunks.push(audioData);
+        try {
+          const audioData = Uint8Array.from(atob(response.audio), (c) =>
+            c.charCodeAt(0)
+          );
+          audioChunks.push(audioData);
+        } catch (err) {
+          console.error("Error converting audio data:", err);
+        }
       }
       if (response.isFinal) {
-        console.log("Final WebSocket message received, playing audio chunks");
         playAudioChunks();
       }
     };
@@ -209,22 +219,23 @@ export default function VoiceAssistant() {
       setIsSpeaking(false);
     };
 
-    socket.onclose = (event) => {
-      console.log(
-        `WebSocket connection closed, code=${event.code}, reason=${event.reason}`
-      );
+    socket.onclose = () => {
       setTimeout(() => setIsSpeaking(false), 2000);
     };
   };
 
   const playAudioChunks = async () => {
+    if (audioChunks.length === 0) {
+      console.warn("No audio chunks available for merging.");
+      return;
+    }
+
     try {
-      console.log("Playing audio chunks");
       const audioContext = new (window.AudioContext ||
         window.webkitAudioContext)();
-      const combinedBuffer = mergeAudioChunks(audioChunks);
+      if (audioContext.state === "suspended") await audioContext.resume();
 
-      console.log("Decoding audio data");
+      const combinedBuffer = mergeAudioChunks(audioChunks);
       const audioBuffer = await decodeAudioDataWithRetry(
         audioContext,
         combinedBuffer,
@@ -239,10 +250,7 @@ export default function VoiceAssistant() {
       source.connect(audioContext.destination);
       source.start(0);
 
-      source.onended = () => {
-        console.log("Audio playback ended");
-        setIsSpeaking(false);
-      };
+      source.onended = () => setIsSpeaking(false);
     } catch (error) {
       console.error("Error playing audio:", error);
       setIsSpeaking(false);
@@ -256,27 +264,17 @@ export default function VoiceAssistant() {
   ): Promise<AudioBuffer | null> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`Decoding audio data (attempt ${attempt})`);
         return await new Promise<AudioBuffer>((resolve, reject) => {
           audioContext.decodeAudioData(buffer, resolve, reject);
         });
       } catch (error) {
         console.warn(`decodeAudioData attempt ${attempt} failed:`, error);
-        if (attempt === retries) {
-          console.error("All retries failed for decodeAudioData.");
-          return null;
-        }
       }
     }
     return null;
   };
 
   const mergeAudioChunks = (chunks: Uint8Array[]): ArrayBuffer => {
-    if (!chunks || chunks.length === 0) {
-      console.warn("No audio chunks available for merging.");
-      return new ArrayBuffer(0);
-    }
-
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const mergedArray = new Uint8Array(totalLength);
     let offset = 0;
@@ -284,9 +282,9 @@ export default function VoiceAssistant() {
       mergedArray.set(chunk, offset);
       offset += chunk.length;
     }
-    console.log("Audio chunks merged successfully");
     return mergedArray.buffer;
   };
+
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-8 bg-gray-900 rounded-xl shadow-2xl">
       <button
