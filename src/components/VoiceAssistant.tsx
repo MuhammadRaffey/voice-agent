@@ -59,21 +59,25 @@ export default function VoiceAssistant() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioChunks: Uint8Array[] = [];
 
-  // Effect to handle word-by-word text reveal
   useEffect(() => {
     if (isSpeaking && finalResponse) {
+      console.log("isSpeaking:", isSpeaking);
+      console.log("finalResponse:", finalResponse);
+
       const words = finalResponse.split(" ");
       if (wordIndex < words.length) {
         const timer = setTimeout(() => {
           setVisibleText(words.slice(0, wordIndex + 1).join(" "));
           setWordIndex((prev) => prev + 1);
-        }, 200); // Adjust timing as needed
+          console.log("Visible text updated:", visibleText);
+        }, 200);
         return () => clearTimeout(timer);
       }
     }
   }, [isSpeaking, wordIndex, finalResponse]);
 
   const startRecording = () => {
+    console.log("Recording started");
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -90,6 +94,7 @@ export default function VoiceAssistant() {
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const resultTranscript = event.results[0][0].transcript;
+      console.log("Transcript received:", resultTranscript);
       setTranscript(resultTranscript);
       fetchAIResponse(resultTranscript);
     };
@@ -99,7 +104,10 @@ export default function VoiceAssistant() {
       setIsRecording(false);
     };
 
-    recognition.onend = () => setIsRecording(false);
+    recognition.onend = () => {
+      console.log("Speech recognition ended");
+      setIsRecording(false);
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
@@ -107,6 +115,7 @@ export default function VoiceAssistant() {
   };
 
   const fetchAIResponse = async (userText: string) => {
+    console.log("Fetching AI response for:", userText);
     setResponseText("");
     setFinalResponse("");
     setIsLoading(true);
@@ -139,11 +148,13 @@ export default function VoiceAssistant() {
             const jsonStr = part.replace(/^data:\s*/, "");
             try {
               const event: SSEEvent = JSON.parse(jsonStr);
+              console.log("Received SSE event:", event.text);
               setResponseText((prev) => prev + event.text);
             } catch (err) {
               console.error("Error parsing SSE event:", err);
             }
           } else if (part.startsWith("event: done")) {
+            console.log("Final response received:", responseText);
             setFinalResponse(responseText);
             setIsLoading(false);
             streamAudio(responseText);
@@ -158,10 +169,12 @@ export default function VoiceAssistant() {
   };
 
   const streamAudio = (text: string) => {
+    console.log("Streaming audio for:", text);
     const socket = new WebSocket(wsUrl);
     setIsSpeaking(true);
 
     socket.onopen = () => {
+      console.log("WebSocket connection opened");
       const bosMessage = {
         text: " ",
         voice_settings: {
@@ -177,6 +190,7 @@ export default function VoiceAssistant() {
     };
 
     socket.onmessage = (event) => {
+      console.log("WebSocket message received");
       const response = JSON.parse(event.data);
       if (response.audio) {
         const audioData = Uint8Array.from(atob(response.audio), (c) =>
@@ -185,6 +199,7 @@ export default function VoiceAssistant() {
         audioChunks.push(audioData);
       }
       if (response.isFinal) {
+        console.log("Final WebSocket message received, playing audio chunks");
         playAudioChunks();
       }
     };
@@ -195,21 +210,21 @@ export default function VoiceAssistant() {
     };
 
     socket.onclose = (event) => {
-      console[event.wasClean ? "info" : "warn"](
-        `Connection ${event.wasClean ? "closed cleanly" : "died"}, code=${
-          event.code
-        }, reason=${event.reason}`
+      console.log(
+        `WebSocket connection closed, code=${event.code}, reason=${event.reason}`
       );
-      setTimeout(() => setIsSpeaking(false), 2000); // Give time for audio to finish
+      setTimeout(() => setIsSpeaking(false), 2000);
     };
   };
 
   const playAudioChunks = async () => {
     try {
+      console.log("Playing audio chunks");
       const audioContext = new (window.AudioContext ||
         window.webkitAudioContext)();
       const combinedBuffer = mergeAudioChunks(audioChunks);
 
+      console.log("Decoding audio data");
       const audioBuffer = await decodeAudioDataWithRetry(
         audioContext,
         combinedBuffer,
@@ -225,6 +240,7 @@ export default function VoiceAssistant() {
       source.start(0);
 
       source.onended = () => {
+        console.log("Audio playback ended");
         setIsSpeaking(false);
       };
     } catch (error) {
@@ -240,6 +256,7 @@ export default function VoiceAssistant() {
   ): Promise<AudioBuffer | null> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
+        console.log(`Decoding audio data (attempt ${attempt})`);
         return await new Promise<AudioBuffer>((resolve, reject) => {
           audioContext.decodeAudioData(buffer, resolve, reject);
         });
@@ -267,9 +284,9 @@ export default function VoiceAssistant() {
       mergedArray.set(chunk, offset);
       offset += chunk.length;
     }
+    console.log("Audio chunks merged successfully");
     return mergedArray.buffer;
   };
-
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-8 bg-gray-900 rounded-xl shadow-2xl">
       <button
