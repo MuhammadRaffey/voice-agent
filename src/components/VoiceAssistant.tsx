@@ -50,7 +50,6 @@ interface SSEEvent {
 export default function VoiceAssistant() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [responseText, setResponseText] = useState("");
   const [finalResponse, setFinalResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -58,9 +57,9 @@ export default function VoiceAssistant() {
   const [wordIndex, setWordIndex] = useState(0);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioChunks: Uint8Array[] = [];
+  const responseBuffer = useRef(""); // Added to handle streaming text accumulation
 
   useEffect(() => {
-    // Preload WebSocket when the component mounts
     const preloadSocket = new WebSocket(wsUrl);
     preloadSocket.onopen = () => {
       console.log("Preloading WebSocket...");
@@ -82,7 +81,7 @@ export default function VoiceAssistant() {
       console.log("Preload WebSocket closed.");
     };
 
-    return () => preloadSocket.close(); // Cleanup the socket on component unmount
+    return () => preloadSocket.close();
   }, []);
 
   useEffect(() => {
@@ -131,11 +130,11 @@ export default function VoiceAssistant() {
   };
 
   const fetchAIResponse = async (userText: string) => {
-    setResponseText("");
     setFinalResponse("");
     setIsLoading(true);
     setVisibleText("");
     setWordIndex(0);
+    responseBuffer.current = ""; // Reset response buffer
 
     try {
       const response = await fetch("/api/stream", {
@@ -163,14 +162,14 @@ export default function VoiceAssistant() {
             const jsonStr = part.replace(/^data:\s*/, "");
             try {
               const event: SSEEvent = JSON.parse(jsonStr);
-              setResponseText((prev) => prev + event.text);
+              responseBuffer.current += event.text; // Use buffer ref instead of state
             } catch (err) {
               console.error("Error parsing SSE event:", err);
             }
           } else if (part.startsWith("event: done")) {
-            setFinalResponse(responseText);
+            setFinalResponse(responseBuffer.current); // Use buffered response
             setIsLoading(false);
-            streamAudio(responseText);
+            streamAudio(responseBuffer.current); // Pass buffered text directly
             return;
           }
         }

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         try {
           // console.log("Requesting Groq completion...");
           const completionStream = await groqClient.chat.completions.create({
-            model: "deepseek-r1-distill-llama-70b",
+            model: "llama-3.3-70b-versatile", //deepseek-r1-distill-llama-70b
             messages: messages,
             temperature: 0.7,
             max_tokens: 1024,
