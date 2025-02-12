@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DeepSeek R1 Voice Agent",
-  description: "A voice assistant for DeepSeek R1",
+  title: "Voice Agent",
+  description: "A voice assistant using Groq Cloud LLMs",
 };
 
 export default function RootLayout({

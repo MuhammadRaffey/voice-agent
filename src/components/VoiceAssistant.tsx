@@ -285,61 +285,67 @@ export default function VoiceAssistant() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-8 bg-gray-900 rounded-xl shadow-2xl">
+    <div className="space-y-6">
       <button
         onClick={startRecording}
         disabled={isRecording}
-        className={`w-full relative overflow-hidden group px-6 py-4 rounded-lg font-semibold text-lg transition-all duration-300 ease-in-out ${
+        className={`w-full relative group px-6 py-4 rounded-xl font-medium text-base sm:text-lg transition-all duration-300 ${
           isRecording
-            ? "bg-red-600 hover:bg-red-700"
-            : "bg-blue-600 hover:bg-blue-700"
-        } flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed`}
+            ? "bg-red-500/20 border-2 border-red-500 text-red-400"
+            : "bg-blue-500/20 border-2 border-blue-500 hover:bg-blue-500/30 text-blue-400"
+        } flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed`}
       >
         {isRecording ? (
           <>
             <div className="animate-pulse">
-              <Mic className="w-6 h-6" />
+              <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <span>Listening...</span>
           </>
         ) : (
           <>
-            <Mic className="w-6 h-6" />
-            <span>Record your question</span>
+            <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
+            <span>Start Recording</span>
           </>
         )}
       </button>
 
       {transcript && (
         <div className="space-y-2 animate-fadeIn">
-          <h3 className="text-gray-400 font-medium">You said:</h3>
-          <p className="text-white text-lg p-4 bg-gray-800 rounded-lg">
-            {transcript}
-          </p>
+          <h3 className="text-gray-400 font-medium text-sm sm:text-base">
+            You said:
+          </h3>
+          <div className="p-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
+            <p className="text-gray-200 text-base sm:text-lg">{transcript}</p>
+          </div>
         </div>
       )}
 
       {isLoading && (
-        <div className="flex items-center gap-3 text-blue-400 animate-pulse">
+        <div className="flex items-center gap-3 text-blue-400 animate-pulse p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Processing response...</span>
+          <span className="text-sm sm:text-base">
+            Processing your request...
+          </span>
         </div>
       )}
 
       {finalResponse && (
         <div className="space-y-2 animate-fadeIn">
           <div className="flex items-center gap-3">
-            <h3 className="text-gray-400 font-medium">DeepSeek R1:</h3>
+            <h3 className="text-gray-400 font-medium text-sm sm:text-base">
+              Assistant:
+            </h3>
             {isSpeaking && (
               <div className="relative flex items-center justify-center">
-                <div className="absolute w-3 h-3 bg-blue-500 rounded-full"></div>
-                <div className="absolute w-3 h-3 bg-blue-500 rounded-full animate-ping"></div>
-                <div className="absolute w-4 h-4 bg-blue-400 rounded-full animate-pulse opacity-75"></div>
+                <div className="absolute w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full"></div>
+                <div className="absolute w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full animate-ping"></div>
+                <div className="absolute w-3 h-3 sm:w-4 sm:h-4 bg-blue-400 rounded-full animate-pulse opacity-75"></div>
               </div>
             )}
           </div>
-          <div className="relative p-4 bg-gray-800 rounded-lg">
-            <p className="text-white text-lg whitespace-pre-line">
+          <div className="relative p-4 bg-gradient-to-b from-gray-800/50 to-gray-900/50 rounded-xl border border-gray-700/50">
+            <p className="text-gray-200 text-base sm:text-lg whitespace-pre-line leading-relaxed">
               {isSpeaking ? visibleText : finalResponse}
             </p>
           </div>
