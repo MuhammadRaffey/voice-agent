@@ -7,6 +7,7 @@ declare global {
   interface Window {
     SpeechRecognition: new () => SpeechRecognition;
     webkitSpeechRecognition: new () => SpeechRecognition;
+    webkitAudioContext: typeof AudioContext;
   }
 }
 
@@ -205,21 +206,24 @@ export default function VoiceAssistant() {
 
   const playAudioChunks = async () => {
     try {
-      const audioContext = new AudioContext();
+      const audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
       const combinedBuffer = mergeAudioChunks(audioChunks);
 
-      const audioBuffer = await new Promise<AudioBuffer>(
-        (resolve: (buffer: AudioBuffer) => void, reject) => {
-          audioContext.decodeAudioData(combinedBuffer, resolve, reject);
-        }
+      const audioBuffer = await decodeAudioDataWithRetry(
+        audioContext,
+        combinedBuffer,
+        3
       );
+
+      if (!audioBuffer)
+        throw new Error("Audio buffer decoding failed after retries.");
 
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContext.destination);
       source.start(0);
 
-      // Set speaking to false when audio ends
       source.onended = () => {
         setIsSpeaking(false);
       };
@@ -229,7 +233,33 @@ export default function VoiceAssistant() {
     }
   };
 
+  const decodeAudioDataWithRetry = async (
+    audioContext: AudioContext,
+    buffer: ArrayBuffer,
+    retries: number
+  ): Promise<AudioBuffer | null> => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await new Promise<AudioBuffer>((resolve, reject) => {
+          audioContext.decodeAudioData(buffer, resolve, reject);
+        });
+      } catch (error) {
+        console.warn(`decodeAudioData attempt ${attempt} failed:`, error);
+        if (attempt === retries) {
+          console.error("All retries failed for decodeAudioData.");
+          return null;
+        }
+      }
+    }
+    return null;
+  };
+
   const mergeAudioChunks = (chunks: Uint8Array[]): ArrayBuffer => {
+    if (!chunks || chunks.length === 0) {
+      console.warn("No audio chunks available for merging.");
+      return new ArrayBuffer(0);
+    }
+
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const mergedArray = new Uint8Array(totalLength);
     let offset = 0;
