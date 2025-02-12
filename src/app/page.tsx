@@ -1,4 +1,5 @@
 import VoiceAssistant from "@/components/VoiceAssistant";
+import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
@@ -8,6 +9,9 @@ export default function Home() {
       </h1>
       <div className="w-full max-w-lg shadow-md rounded-lg p-6">
         <VoiceAssistant />
+      </div>
+      <div className="w-full max-w-lg shadow-md rounded-lg p-6">
+        <Footer />
       </div>
     </main>
   );

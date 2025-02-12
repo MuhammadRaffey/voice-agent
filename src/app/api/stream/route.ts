@@ -28,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       {
         role: "system",
         content:
-          "You are a language model called R1 created by DeepSeek, answer the questions being asked in less than 300 characters.",
+          "You are a language model called DeepSeek R1 created by DeepSeek, answer the questions being asked in less than 500 characters.",
       },
       {
         role: "user",
